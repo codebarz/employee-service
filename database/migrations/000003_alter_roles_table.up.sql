@@ -1,0 +1,1 @@
+ALTER TABLE roles ADD CONSTRAINT Title_unique UNIQUE (title);
