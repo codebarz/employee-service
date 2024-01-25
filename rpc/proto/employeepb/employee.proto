@@ -1,0 +1,54 @@
+syntax = "proto3";
+option go_package = "github.com/greyfinance/codebarz/rpc/proto/employeepb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service EmployeeService {
+    rpc CreateEmployee(CreateEmployeeRequest) returns (Employee);
+    rpc QueryEmployees(QueryEmployeesRequest) returns (Employees);
+    rpc QueryEmployeeByID(QueryEmployeeByIDRequest) returns (Employee);
+    rpc UpdateEmployee(UpdateEmployeeRequest) returns (Employee);
+    rpc DeleteEmployee(DeleteEmployeeRequest) returns (google.protobuf.Empty);
+}
+
+message CreateEmployeeRequest {
+    string first_name = 2;
+    string last_name = 3;
+    string role = 4;
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+    google.protobuf.Timestamp deleted_at = 7;
+
+}
+
+message Employee {
+    string id = 1;
+    string first_name = 2;
+    string last_name = 3;
+    string role = 4;
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+    google.protobuf.Timestamp deleted_at = 7;    
+}
+
+message Employees {
+    repeated Employee employees = 1;
+}
+
+message QueryEmployeesRequest {}
+
+message QueryEmployeeByIDRequest {
+    string id = 1;
+}
+
+message UpdateEmployeeRequest {
+    string id = 1;
+    string first_name = 2;
+    string last_name = 3;
+    string role = 4;
+}
+
+message DeleteEmployeeRequest {
+    string id = 1;
+}
