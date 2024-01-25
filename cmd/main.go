@@ -6,8 +6,11 @@ import (
 	"os"
 
 	"github.com/codebarz/employee-service/database"
+	"github.com/codebarz/employee-service/entities/employees"
 	"github.com/codebarz/employee-service/entities/roles"
+	"github.com/codebarz/employee-service/rpc/proto/employeepb"
 	"github.com/codebarz/employee-service/rpc/proto/rolepb"
+	"github.com/codebarz/employee-service/services/employee"
 	"github.com/codebarz/employee-service/services/role"
 	roleservice "github.com/codebarz/employee-service/services/role"
 	"github.com/go-kit/log"
@@ -70,8 +73,14 @@ func main() {
 	service := role.NewService(logger, newRepo)
 	rs := roleservice.NewGRPCHandler(logger, service)
 
+	employeeRepo := employees.NewPgRepository(logger, conn)
+	employeeService := employee.NewService(logger, employeeRepo)
+	es := employee.NewGRPCHandler(logger, employeeService)
+
+	// register rpc server
 	reflection.Register(rpc)
 	rolepb.RegisterRoleServiceServer(rpc, rs)
+	employeepb.RegisterEmployeeServiceServer(rpc, es)
 
 	lis, err := net.Listen("tcp", ":9092")
 

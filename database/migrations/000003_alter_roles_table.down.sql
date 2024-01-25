@@ -1,1 +1,1 @@
-ALTER TABLE roles DROP INDEX Title_unique;
+ALTER TABLE roles DROP CONSTRAINT Title_unique;

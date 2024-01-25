@@ -45,7 +45,7 @@ func (c *Config) Migrate(cfg Config) error {
 		return err
 	}
 
-	if err := m.Migrate(1); err != nil {
+	if err := m.Migrate(4); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			c.l.Log("migration: no database change", err)
 		} else {

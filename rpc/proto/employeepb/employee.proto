@@ -16,9 +16,10 @@ message CreateEmployeeRequest {
     string first_name = 2;
     string last_name = 3;
     string role = 4;
-    google.protobuf.Timestamp created_at = 5;
-    google.protobuf.Timestamp updated_at = 6;
-    google.protobuf.Timestamp deleted_at = 7;
+    string email = 5;
+    google.protobuf.Timestamp created_at = 6;
+    google.protobuf.Timestamp updated_at = 7;
+    google.protobuf.Timestamp deleted_at = 8;
 
 }
 
@@ -27,9 +28,10 @@ message Employee {
     string first_name = 2;
     string last_name = 3;
     string role = 4;
-    google.protobuf.Timestamp created_at = 5;
-    google.protobuf.Timestamp updated_at = 6;
-    google.protobuf.Timestamp deleted_at = 7;    
+    string email = 5;
+    google.protobuf.Timestamp created_at = 6;
+    google.protobuf.Timestamp updated_at = 7;
+    google.protobuf.Timestamp deleted_at = 8;    
 }
 
 message Employees {
@@ -47,6 +49,7 @@ message UpdateEmployeeRequest {
     string first_name = 2;
     string last_name = 3;
     string role = 4;
+    string email = 5;
 }
 
 message DeleteEmployeeRequest {

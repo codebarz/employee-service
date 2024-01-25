@@ -23,7 +23,7 @@ func PBToNewRole(pb *rolepb.CreateRoleRequest) (*NewRole, error) {
 
 func RoleToPB(role *Role) (*rolepb.Role, error) {
 	if role == nil {
-		return nil, errors.New("bank is nil")
+		return nil, errors.New("role is nil")
 	}
 	var pbCreatedAt *timestamppb.Timestamp
 	var pbUpdatedAt *timestamppb.Timestamp
