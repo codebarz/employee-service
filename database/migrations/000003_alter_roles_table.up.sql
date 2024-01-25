@@ -1,1 +1,1 @@
-ALTER TABLE roles ADD CONSTRAINT Title_unique UNIQUE (title);
+ALTER TABLE roles ADD CONSTRAINT Title_unique UNIQUE (title) IF NOT EXISTS;
