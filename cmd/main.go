@@ -2,22 +2,27 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net/http"
+	"net"
 	"os"
 
 	"github.com/codebarz/employee-service/database"
-	"github.com/go-chi/chi"
+	"github.com/codebarz/employee-service/entities/roles"
+	"github.com/codebarz/employee-service/rpc/proto/rolepb"
+	"github.com/codebarz/employee-service/services/role"
+	roleservice "github.com/codebarz/employee-service/services/role"
+	"github.com/go-kit/log"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
 
-	logger := log.New(os.Stdout, "employee-service ", log.LstdFlags)
+	logger := initLogger()
 
 	godotenv.Load()
 
-	r := chi.NewRouter()
+	// r := chi.NewRouter()
 
 	dbURL := os.Getenv("DB_URL")
 
@@ -29,20 +34,20 @@ func main() {
 
 	if err != nil {
 		fmtErr := fmt.Sprintf("Err connecting to postgres DB. [ERROR]:%v", err)
-		log.Fatal(fmtErr)
+		logger.Log(fmtErr)
 		os.Exit(1)
 	}
 
 	connErr := conn.Ping()
 
 	if connErr != nil {
-		log.Fatal(connErr)
+		logger.Log(connErr)
 	}
 
-	log.Println("DB connection successful")
+	logger.Log("DB connection successful")
 
 	if err := db.Migrate(dbCfg); err != nil {
-		log.Fatal("Migration err", err)
+		logger.Log("Migration error: ", err)
 		os.Exit(1)
 	}
 
@@ -51,5 +56,38 @@ func main() {
 		conn.Close()
 	}()
 
-	http.ListenAndServe(":9090", r)
+	// v1Routes := chi.NewRouter()
+
+	// v1Routes.Get("/health-check", services.Health)
+
+	// r.Mount("/v1", v1Routes)
+
+	// http.ListenAndServe(":9090", r)
+
+	// rpc server
+	rpc := grpc.NewServer()
+	newRepo := roles.NewPgRepository(logger, conn)
+	service := role.NewService(logger, newRepo)
+	rs := roleservice.NewGRPCHandler(logger, service)
+
+	reflection.Register(rpc)
+	rolepb.RegisterRoleServiceServer(rpc, rs)
+
+	lis, err := net.Listen("tcp", ":9092")
+
+	if err != nil {
+		logger.Log("Can not listen")
+		os.Exit(1)
+	}
+
+	rpc.Serve(lis)
+}
+
+func initLogger() log.Logger {
+	logger := log.NewLogfmtLogger(os.Stderr)
+	if os.Getenv("ENVIRONMENT") == "prod" || os.Getenv("ENVIRONMENT") == "stage" || os.Getenv("LOGFMT") == "json" {
+		logger = log.NewJSONLogger(os.Stdout)
+	}
+
+	return logger
 }
