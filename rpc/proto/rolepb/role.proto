@@ -1,0 +1,49 @@
+syntax = "proto3";
+option go_package = "github.com/greyfinance/codebarz/rpc/proto/rolepb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+
+
+service RoleService {
+    rpc CreateRole(CreateRoleRequest) returns (Role);
+    rpc QueryRoles(QueryRoleRequest) returns (Roles);
+    rpc QueryRoleByID(QueryRoleByIDRequest) returns (Role);
+    rpc UpdateRole(UpdateRoleRequest) returns (Role) {}
+    rpc DeleteRole(DeleteRoleRequest) returns (google.protobuf.Empty) {}
+}
+
+message CreateRoleRequest {
+    string title = 1;
+    int32 level = 2;
+}
+
+message Role {
+    string id = 1;
+    string title = 2;
+    int32 level = 3;
+    google.protobuf.Timestamp created_at = 4;
+    google.protobuf.Timestamp updated_at = 5;
+    google.protobuf.Timestamp deleted_at = 6;
+}
+
+message QueryRoleRequest {}
+
+message Roles {
+    repeated Role roles = 1;
+}
+
+message QueryRoleByIDRequest  {
+    string id = 1;
+}
+
+message UpdateRoleRequest {
+    string id = 1;
+    string title = 2;
+    int32 level = 3;
+}
+
+message DeleteRoleRequest {
+    string id = 1;
+}
