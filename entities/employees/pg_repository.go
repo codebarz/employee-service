@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/mail"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/codebarz/employee-service/database"
@@ -34,6 +35,10 @@ func NewPgRepository(l log.Logger, db *sqlx.DB) Repository {
 
 func (p *PgRepository) Create(ctx context.Context, traceID string, e *NewEmployee) (*Employee, error) {
 	employee := &Employee{}
+
+	if !valid(e.Email) {
+		return nil, fmt.Errorf("email not valid")
+	}
 
 	roleUUID, err := uuid.Parse(e.Role)
 
@@ -132,6 +137,10 @@ func (p *PgRepository) Update(ctx context.Context, traceID string, employeeID st
 		return nil, fmt.Errorf(fmt.Sprintf("invalid uuid %v", err))
 	}
 
+	if !valid(*updatedEmployee.Email) {
+		return nil, fmt.Errorf("email not valid")
+	}
+
 	e, err := p.QueryByID(ctx, traceID, employeeID)
 
 	if err != nil {
@@ -199,4 +208,9 @@ func (p *PgRepository) Delete(ctx context.Context, traceID string, employeeID st
 	}
 
 	return nil
+}
+
+func valid(email string) bool {
+	_, err := mail.ParseAddress(email)
+	return err == nil
 }
