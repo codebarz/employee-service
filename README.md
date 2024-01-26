@@ -25,7 +25,7 @@ make proto
 ```
 
 ## Test Service
-Can be tested using `grpcurl`. For example to create employee
+Can be tested using <a href="https://github.com/fullstorydev/grpcurl">`grpcurl`</a> CLI tool. For example to create employee
 ```bash
 grpcurl --plaintext -d '{"first_name": "Tega", "last_name": "Oke", "role"
 : "e8dfbedc-f369-4863-9e9f-ea4e3831f16a", "email": "tegagrey.co"}' localhost:9092 EmployeeService.CreateEmployee
