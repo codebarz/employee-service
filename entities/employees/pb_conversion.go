@@ -2,6 +2,7 @@ package employees
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/codebarz/employee-service/rpc/proto/employeepb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,5 +41,20 @@ func EmployeeToPB(employee *Employee) (*employeepb.Employee, error) {
 		Email:     employee.Email,
 		CreatedAt: pbCreatedAt,
 		UpdatedAt: pbUpdatedAt,
+	}, nil
+}
+
+func EmployeesToPB(employees []Employee) (*employeepb.Employees, error) {
+	fmt.Print(employees)
+	pbs := []*employeepb.Employee{}
+	for _, e := range employees {
+		pb, err := EmployeeToPB(&e)
+		if err != nil {
+			return nil, err
+		}
+		pbs = append(pbs, pb)
+	}
+	return &employeepb.Employees{
+		Employees: pbs,
 	}, nil
 }
