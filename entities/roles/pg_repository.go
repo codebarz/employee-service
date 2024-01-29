@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/codebarz/employee-service/database"
@@ -40,7 +39,7 @@ func (p *PgRepository) Create(ctx context.Context, traceID string, r *NewRole) (
 	}).Suffix("RETURNING *").ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building insert query %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "role.Query", database.Log(q, args...))
@@ -56,7 +55,7 @@ func (p *PgRepository) Query(ctx context.Context, traceID string) ([]Role, error
 	q, args, err := p.psql.Select("*").From(TABLE_NAME).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building get query %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "role.Query", database.Log(q, args...))
@@ -75,13 +74,13 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, roleID str
 	roleUUID, err := uuid.Parse(roleID)
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error parsing uuid get query by id %v", err))
+		return nil, ErrInvalidUUID
 	}
 
 	q, args, err := p.psql.Select("*").From(TABLE_NAME).Where(sq.Eq{"id": roleUUID}).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building get query by id %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "role.QueryByID", database.Log(q, args...))
@@ -90,7 +89,7 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, roleID str
 
 	if err := p.db.GetContext(ctx, role, q, args...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf(fmt.Sprintf("error getting role by id %v", err))
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -100,7 +99,7 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, roleID str
 
 func (p *PgRepository) Update(ctx context.Context, traceID string, roleID string, updatedRole UpdateRole) (*Role, error) {
 	if _, err := uuid.Parse(roleID); err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("invalid uuid %v", err))
+		return nil, ErrInvalidUUID
 	}
 
 	role, err := p.QueryByID(ctx, traceID, roleID)
@@ -123,7 +122,7 @@ func (p *PgRepository) Update(ctx context.Context, traceID string, roleID string
 	}).Where(sq.Eq{"id": roleID}).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building update query by id %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	if _, err = p.db.ExecContext(ctx, q, args...); err != nil {
@@ -137,13 +136,13 @@ func (p *PgRepository) Delete(ctx context.Context, traceID string, roleID string
 	id, err := uuid.Parse(roleID)
 
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("error building get query by id %v", err))
+		return ErrBuildingQuery
 	}
 
 	q, args, err := p.psql.Delete("roles").Where(sq.Eq{"id": id}).ToSql()
 
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("building delete role query %v", err))
+		return ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("%s : %s : query : %s", traceID, "role.Delete",
@@ -153,7 +152,7 @@ func (p *PgRepository) Delete(ctx context.Context, traceID string, roleID string
 	if _, err = p.db.ExecContext(ctx, q, args...); err != nil {
 		if pgerr, ok := err.(*pq.Error); ok {
 			if pgerr.Code == "22P02" {
-				return fmt.Errorf(fmt.Sprintf("error building delete query by id %v", err))
+				return ErrBuildingQuery
 			}
 		}
 		return err

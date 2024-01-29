@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"net/mail"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/codebarz/employee-service/database"
@@ -36,20 +34,16 @@ func NewPgRepository(l log.Logger, db *sqlx.DB) Repository {
 func (p *PgRepository) Create(ctx context.Context, traceID string, e *NewEmployee) (*Employee, error) {
 	employee := &Employee{}
 
-	if !valid(e.Email) {
-		return nil, fmt.Errorf("email not valid")
-	}
-
 	roleUUID, err := uuid.Parse(e.Role)
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error parsing role uuid get query by id %v", err))
+		return nil, ErrInvalidUUID
 	}
 
 	q, args, err := p.psql.Select("*").From("roles").Where(sq.Eq{"id": roleUUID}).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building get role query by id %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "role.QueryByID", database.Log(q, args...))
@@ -58,7 +52,7 @@ func (p *PgRepository) Create(ctx context.Context, traceID string, e *NewEmploye
 
 	if err := p.db.GetContext(ctx, role, q, args...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf(fmt.Sprintf("error getting role by id %v", err))
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -71,7 +65,7 @@ func (p *PgRepository) Create(ctx context.Context, traceID string, e *NewEmploye
 	}).Suffix("RETURNING *").ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building insert query %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "employee.Query", database.Log(q, args...))
@@ -90,7 +84,7 @@ func (p *PgRepository) Query(ctx context.Context, traceID string) ([]Employee, e
 	q, args, err := p.psql.Select("*").From(TABLE_NAME).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building get query %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "employee.Query", database.Log(q, args...))
@@ -109,13 +103,13 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, employeeID
 	eUUID, err := uuid.Parse(employeeID)
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error parsing uuid get query by id %v", err))
+		return nil, ErrInvalidUUID
 	}
 
 	q, args, err := p.psql.Select("*").From(TABLE_NAME).Where(sq.Eq{"id": eUUID}).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building get query by id %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("traceID", traceID, "employee.QueryByID", database.Log(q, args...))
@@ -124,7 +118,7 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, employeeID
 
 	if err := p.db.GetContext(ctx, employee, q, args...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf(fmt.Sprintf("error getting employee by id %v", err))
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -134,17 +128,13 @@ func (p *PgRepository) QueryByID(ctx context.Context, traceID string, employeeID
 
 func (p *PgRepository) Update(ctx context.Context, traceID string, employeeID string, updatedEmployee UpdateEmployee) (*Employee, error) {
 	if _, err := uuid.Parse(employeeID); err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("invalid uuid %v", err))
-	}
-
-	if !valid(*updatedEmployee.Email) {
-		return nil, fmt.Errorf("email not valid")
+		return nil, ErrInvalidUUID
 	}
 
 	e, err := p.QueryByID(ctx, traceID, employeeID)
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error querying selected role %v", err))
+		return nil, ErrNotFound
 	}
 
 	if updatedEmployee.FirstName != nil {
@@ -171,7 +161,7 @@ func (p *PgRepository) Update(ctx context.Context, traceID string, employeeID st
 	}).Where(sq.Eq{"id": employeeID}).ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf("error building update query by id %v", err))
+		return nil, ErrBuildingQuery
 	}
 
 	if _, err = p.db.ExecContext(ctx, q, args...); err != nil {
@@ -185,13 +175,13 @@ func (p *PgRepository) Delete(ctx context.Context, traceID string, employeeID st
 	eUUID, err := uuid.Parse(employeeID)
 
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("error parsing uuid get query by id %v", err))
+		return ErrInvalidUUID
 	}
 
 	q, args, err := p.psql.Delete("employees").Where(sq.Eq{"id": eUUID}).ToSql()
 
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("building delete employee query %v", err))
+		return ErrBuildingQuery
 	}
 
 	level.Info(p.log).Log("%s : %s : query : %s", traceID, "employee.Delete",
@@ -201,16 +191,11 @@ func (p *PgRepository) Delete(ctx context.Context, traceID string, employeeID st
 	if _, err = p.db.ExecContext(ctx, q, args...); err != nil {
 		if pgerr, ok := err.(*pq.Error); ok {
 			if pgerr.Code == "22P02" {
-				return fmt.Errorf(fmt.Sprintf("error building delete query by id %v", err))
+				return ErrBuildingQuery
 			}
 		}
 		return err
 	}
 
 	return nil
-}
-
-func valid(email string) bool {
-	_, err := mail.ParseAddress(email)
-	return err == nil
 }

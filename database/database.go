@@ -22,6 +22,8 @@ type Config struct {
 //go:embed migrations/*.sql
 var fs embed.FS
 
+const MIGRATION_NUMBER = 4
+
 func (c *Config) OpenConnection(cfg Config) (*sqlx.DB, error) {
 	if cfg.DatabaseURL == "" {
 		c.l.Log("invalid postgres db URL passed")
@@ -45,7 +47,7 @@ func (c *Config) Migrate(cfg Config) error {
 		return err
 	}
 
-	if err := m.Migrate(4); err != nil {
+	if err := m.Migrate(MIGRATION_NUMBER); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			c.l.Log("migration: no database change", err)
 		} else {

@@ -2,6 +2,7 @@ package employee
 
 import (
 	"context"
+	"net/mail"
 
 	"github.com/codebarz/employee-service/entities/employees"
 	"github.com/codebarz/employee-service/rpc/proto/employeepb"
@@ -26,6 +27,10 @@ func (h *Handler) CreateEmployee(ctx context.Context, eb *employeepb.CreateEmplo
 
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if !valid(newEmployee.Email) {
+		return nil, status.Error(codes.InvalidArgument, "email not valid")
 	}
 
 	employee, err := h.service.Create(ctx, newEmployee)
@@ -74,6 +79,10 @@ func (h *Handler) UpdateEmployee(ctx context.Context, eb *employeepb.UpdateEmplo
 	email := eb.GetEmail()
 	role := eb.GetRole()
 
+	if !valid(email) {
+		return nil, status.Error(codes.InvalidArgument, "email not valid")
+	}
+
 	e, err := h.service.Update(ctx, employees.UpdateEmployee{
 		Id:        eb.GetId(),
 		FirstName: &firstname,
@@ -87,4 +96,9 @@ func (h *Handler) UpdateEmployee(ctx context.Context, eb *employeepb.UpdateEmplo
 	}
 
 	return employees.EmployeeToPB(e)
+}
+
+func valid(email string) bool {
+	_, err := mail.ParseAddress(email)
+	return err == nil
 }
