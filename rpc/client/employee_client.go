@@ -11,19 +11,19 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Client is the event API gRPC client
-type Client struct {
+// EmployeeClient is the event API gRPC client
+type EmployeeClient struct {
 	l    log.Logger
 	conn *grpc.ClientConn
 	c    employeepb.EmployeeServiceClient
 }
 
 // New creates a new gRPC client
-func NewEmployeeServiceClient(l log.Logger, conn *grpc.ClientConn) *Client {
+func NewEmployeeServiceClient(l log.Logger, conn *grpc.ClientConn) *EmployeeClient {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
-	c := &Client{
+	c := &EmployeeClient{
 		l:    l,
 		conn: conn,
 		c:    employeepb.NewEmployeeServiceClient(conn),
@@ -33,12 +33,12 @@ func NewEmployeeServiceClient(l log.Logger, conn *grpc.ClientConn) *Client {
 }
 
 // Close closes the connection of the gRPC client
-func (c *Client) Close() {
+func (c *EmployeeClient) Close() {
 	c.conn.Close()
 }
 
 // CreateEvent validated the token and returns the login id contained
-func (c *Client) CreateEmployee(ctx context.Context, in *employeepb.CreateEmployeeRequest) (*employeepb.Employee, error) {
+func (c *EmployeeClient) CreateEmployee(ctx context.Context, in *employeepb.CreateEmployeeRequest) (*employeepb.Employee, error) {
 	resp, err := c.c.CreateEmployee(ctx, in)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (c *Client) CreateEmployee(ctx context.Context, in *employeepb.CreateEmploy
 	return resp, nil
 }
 
-func (c *Client) QueryEmployee(ctx context.Context, in *employeepb.QueryEmployeesRequest) (*employeepb.Employees, error) {
+func (c *EmployeeClient) QueryEmployee(ctx context.Context, in *employeepb.QueryEmployeesRequest) (*employeepb.Employees, error) {
 	resp, err := c.c.QueryEmployees(ctx, in)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (c *Client) QueryEmployee(ctx context.Context, in *employeepb.QueryEmployee
 	return resp, nil
 }
 
-func (c *Client) QueryEmployeeByID(ctx context.Context, in *employeepb.QueryEmployeeByIDRequest) (*employeepb.Employee, error) {
+func (c *EmployeeClient) QueryEmployeeByID(ctx context.Context, in *employeepb.QueryEmployeeByIDRequest) (*employeepb.Employee, error) {
 	resp, err := c.c.QueryEmployeeByID(ctx, in)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (c *Client) QueryEmployeeByID(ctx context.Context, in *employeepb.QueryEmpl
 	return resp, nil
 }
 
-func (c *Client) UpdateEmployee(ctx context.Context, in *employeepb.UpdateEmployeeRequest) (*employeepb.Employee, error) {
+func (c *EmployeeClient) UpdateEmployee(ctx context.Context, in *employeepb.UpdateEmployeeRequest) (*employeepb.Employee, error) {
 	resp, err := c.c.UpdateEmployee(ctx, in)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (c *Client) UpdateEmployee(ctx context.Context, in *employeepb.UpdateEmploy
 	return resp, nil
 }
 
-func (c *Client) DeleteEmployee(ctx context.Context, in *employeepb.DeleteEmployeeRequest) (*emptypb.Empty, error) {
+func (c *EmployeeClient) DeleteEmployee(ctx context.Context, in *employeepb.DeleteEmployeeRequest) (*emptypb.Empty, error) {
 	resp, err := c.c.DeleteEmployee(ctx, in)
 	if err != nil {
 		return nil, err
