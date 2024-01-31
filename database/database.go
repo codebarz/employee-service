@@ -2,64 +2,84 @@ package database
 
 import (
 	"embed"
-	"errors"
 	"fmt"
+	"log"
+	"net/url"
 	"strings"
 
-	"github.com/go-kit/log"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/johejo/golang-migrate-extra/source/iofs"
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 type Config struct {
-	DatabaseURL string
-	l           log.Logger
+	PostgresDBURL string
+	DisableTLS    bool
 }
 
 //go:embed migrations/*.sql
-var fs embed.FS
+var migrationFiles embed.FS
 
-const MIGRATION_NUMBER = 4
+const migrationVersion = 4
 
-func (c *Config) OpenConnection(cfg Config) (*sqlx.DB, error) {
-	if cfg.DatabaseURL == "" {
-		c.l.Log("invalid postgres db URL passed")
-		return nil, errors.New("invalid postgres db URL passed")
+func configureDBURL(cfg Config) (string, error) {
+	u, err := url.Parse(cfg.PostgresDBURL)
+	if err != nil {
+		return "", errors.Wrap(err, "parsing db url")
+	}
+	sslMode := "require"
+	if cfg.DisableTLS {
+		sslMode = "disable"
 	}
 
-	return sqlx.Open("postgres", cfg.DatabaseURL)
+	q := make(url.Values)
+	q.Set("sslmode", sslMode)
+	q.Set("timezone", "utc")
+
+	u.RawQuery = q.Encode()
+
+	return u.String(), nil
 }
 
-func (c *Config) Migrate(cfg Config) error {
-	d, err := iofs.New(fs, "migrations")
+func Open(cfg Config) (*sqlx.DB, error) {
+	dbURL, err := configureDBURL(cfg)
+	if err != nil {
+		return nil, err
+	}
 
+	return sqlx.Open("postgres", dbURL)
+}
+
+// Migrate knows how to migrate the database.
+func Migrate(cfg Config) error {
+	dbURL, err := configureDBURL(cfg)
 	if err != nil {
 		return err
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", d, cfg.DatabaseURL)
-
+	d, err := iofs.New(migrationFiles, "migrations")
 	if err != nil {
-		c.l.Log("Migration error:", err)
 		return err
 	}
 
-	if err := m.Migrate(MIGRATION_NUMBER); err != nil {
+	m, err := migrate.NewWithSourceInstance("iofs", d, dbURL)
+	if err != nil {
+		return errors.Wrap(err, "migration files")
+	}
+
+	if err := m.Migrate(migrationVersion); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
-			c.l.Log("migration: no database change", err)
+			log.Println("migration: no database change")
+
 		} else {
-			return err
+			return errors.Wrap(err, "migration up")
 		}
 	}
 
 	return nil
-}
-
-func NewDatabase(l log.Logger) *Config {
-	return &Config{l: l}
 }
 
 func Log(query string, args ...interface{}) string {

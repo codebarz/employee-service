@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"net"
+	"net/http"
 	"os"
 
+	"github.com/codebarz/employee-service/config"
 	"github.com/codebarz/employee-service/database"
 	"github.com/codebarz/employee-service/entities/employees"
 	"github.com/codebarz/employee-service/entities/roles"
@@ -13,83 +13,124 @@ import (
 	"github.com/codebarz/employee-service/services/employee"
 	"github.com/codebarz/employee-service/services/role"
 	roleservice "github.com/codebarz/employee-service/services/role"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/greyfinance/grey-go-libs/http/handler/version"
+	"github.com/greyfinance/grey-go-libs/http/httputils"
+	"github.com/greyfinance/grey-go-libs/http/renderer"
+	"github.com/greyfinance/grey-go-libs/http/starter"
+	"github.com/greyfinance/grey-go-libs/log/levelfilter"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/plugin/ochttp"
+
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_kit "github.com/grpc-ecosystem/go-grpc-middleware/logging/kit"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 )
 
 func main() {
 
 	logger := initLogger()
+	level.Info(logger).Log("msg", "starting application...")
 
 	godotenv.Load()
 
-	// r := chi.NewRouter()
-
-	dbURL := os.Getenv("DB_URL")
-
-	db := database.NewDatabase(logger)
-
-	dbCfg := database.Config{DatabaseURL: dbURL}
-
-	conn, err := db.OpenConnection(dbCfg)
-
+	cfg, err := config.New()
 	if err != nil {
-		fmtErr := fmt.Sprintf("Err connecting to postgres DB. [ERROR]:%v", err)
-		logger.Log(fmtErr)
+		level.Error(logger).Log("config err", err)
 		os.Exit(1)
 	}
 
-	connErr := conn.Ping()
-
-	if connErr != nil {
-		logger.Log(connErr)
+	dbCfg := database.Config{PostgresDBURL: cfg.PostgresDBURL, DisableTLS: cfg.DisableTLS}
+	if err := database.Migrate(dbCfg); err != nil {
+		level.Error(logger).Log("migration err:", err)
+		os.Exit(1)
 	}
 
-	logger.Log("DB connection successful")
-
-	if err := db.Migrate(dbCfg); err != nil {
-		logger.Log("Migration error: ", err)
+	db, err := database.Open(dbCfg)
+	if err != nil {
+		level.Error(logger).Log("connecting to db err", err)
 		os.Exit(1)
 	}
 
 	defer func() {
-		// db.l..Log("Closing DB connection", err)
-		conn.Close()
+		level.Info(logger).Log("Database Stopping", err)
+		db.Close()
 	}()
 
-	// v1Routes := chi.NewRouter()
+	// HTTP Routes
+	router := chi.NewRouter()
+	// render := renderer.NewRenderer(logger)
+	renderer.RegisterDefaultRoutes(router, logger)
 
-	// v1Routes.Get("/health-check", services.Health)
+	//Public route group
+	router.Group(func(r chi.Router) {
+		r.Use(
+			middleware.Recoverer,
+			func(next http.Handler) http.Handler {
+				return &ochttp.Handler{
+					IsPublicEndpoint: true,
+					Handler:          next,
+				}
+			},
+		)
 
-	// r.Mount("/v1", v1Routes)
+		// r.With(renderer.NewPromLatencyExporter("http_request_duration_events_seconds")).
+		// 	Mount("/api/v1/events", eventservice.NewHTTPHandler(eventSvc, render))
+	})
 
-	// http.ListenAndServe(":9090", r)
+	// Servers
+	httpServer := httputils.NewServerWithDefaultTimeouts(logger)
+	httpServer.Handler = router
+	httpServer.Addr = cfg.ListenHTTP
+
+	// For Kubernetes to handle graceful shutdown
+	livenessServer := httputils.NewServerWithDefaultTimeouts(logger)
+	livenessServer.Handler = http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte("liveliness probe ok"))
+	})
+	livenessServer.Addr = cfg.ListenHTTPLiveness
+
+	// gRPC server
+	grpcOpts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			grpc_prometheus.UnaryServerInterceptor,
+			grpc_kit.UnaryServerInterceptor(logger, grpc_kit.WithLevels(grpc_kit.DefaultClientCodeToLevel)),
+		)),
+		grpc.StatsHandler(&ocgrpc.ServerHandler{IsPublicEndpoint: false}),
+	}
 
 	// rpc server
-	rpc := grpc.NewServer()
-	newRepo := roles.NewPgRepository(logger, conn)
+	newRepo := roles.NewPgRepository(logger, db)
 	service := role.NewService(logger, newRepo)
-	rs := roleservice.NewGRPCHandler(logger, service)
 
-	employeeRepo := employees.NewPgRepository(logger, conn)
+	employeeRepo := employees.NewPgRepository(logger, db)
 	employeeService := employee.NewService(logger, employeeRepo)
-	es := employee.NewGRPCHandler(logger, employeeService)
 
-	// register rpc server
-	reflection.Register(rpc)
-	rolepb.RegisterRoleServiceServer(rpc, rs)
-	employeepb.RegisterEmployeeServiceServer(rpc, es)
+	grpcServer := grpc.NewServer(grpcOpts...)
 
-	lis, err := net.Listen("tcp", ":9092")
+	rolepb.RegisterRoleServiceServer(grpcServer, roleservice.NewGRPCHandler(logger, service))
+	employeepb.RegisterEmployeeServiceServer(grpcServer, employee.NewGRPCHandler(logger, employeeService))
+	reflection.Register(grpcServer)
+	grpc_prometheus.Register(grpcServer)
 
-	if err != nil {
-		logger.Log("Can not listen")
+	// start servers
+	servers := starter.New().
+		WithHTTP(httpServer, livenessServer).
+		WithGRPC(grpcServer, cfg.ListenGRPC, nil)
+	servers.Log = logger
+	if err := servers.RunUntilInterrupt(); err != nil {
+		level.Error(logger).Log("msg", "failed to start HTTP/gRPC servers", "err", err)
 		os.Exit(1)
 	}
 
-	rpc.Serve(lis)
 }
 
 func initLogger() log.Logger {
@@ -97,6 +138,12 @@ func initLogger() log.Logger {
 	if os.Getenv("ENVIRONMENT") == "prod" || os.Getenv("ENVIRONMENT") == "stage" || os.Getenv("LOGFMT") == "json" {
 		logger = log.NewJSONLogger(os.Stdout)
 	}
+	logger = levelfilter.FromEnv(logger)
+	logger = log.With(logger,
+		"ts", log.DefaultTimestampUTC,
+		"caller", log.DefaultCaller,
 
+		"commit", version.Commit,
+	)
 	return logger
 }
